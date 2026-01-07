@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { historiaClinicaService, PatientAlert } from '@/services/historiaClinicaService';
+import { getPatientAlerts, deletePatientAlert, updatePatientAlert, PatientAlert } from '@/services/headerServices';
 
 interface AlertsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    ordsrvnro: number;
+    ordsrvnro: string;
     onAlertsUpdate?: () => void;
 }
 
@@ -32,7 +32,7 @@ export default function AlertsModal({ isOpen, onClose, ordsrvnro, onAlertsUpdate
     const loadAlerts = async () => {
         setLoading(true);
         try {
-            const data = await historiaClinicaService.getPatientAlerts('dummy-token', ordsrvnro);
+            const data = await getPatientAlerts('dummy-token', ordsrvnro);
             setAlerts(data);
         } catch (error) {
             console.error('Error loading alerts:', error);
@@ -45,7 +45,7 @@ export default function AlertsModal({ isOpen, onClose, ordsrvnro, onAlertsUpdate
         if (!confirm('¿Está seguro de eliminar esta alerta?')) return;
 
         try {
-            await historiaClinicaService.deletePatientAlert('dummy-token', ordsrvnro, id);
+            await deletePatientAlert('dummy-token', ordsrvnro, id);
             setAlerts(alerts.filter(a => a.id !== id));
             if (onAlertsUpdate) onAlertsUpdate();
         } catch (error) {
@@ -69,7 +69,7 @@ export default function AlertsModal({ isOpen, onClose, ordsrvnro, onAlertsUpdate
     const handleSaveEdit = async () => {
         if (!selectedAlert) return;
         try {
-            await historiaClinicaService.updatePatientAlert('dummy-token', ordsrvnro, {
+            await updatePatientAlert('dummy-token', ordsrvnro, {
                 ...selectedAlert,
                 observaciones: editObservations,
                 fechaFin: editEndDate,

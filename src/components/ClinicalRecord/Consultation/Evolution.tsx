@@ -1,17 +1,24 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { evolutionService } from '@/services/evolutionService';
+import { getEvolution, saveEvolution } from '@/services/evolutionService';
 
 interface EvolutionProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialEvolution: string;
 }
 
-export default function Evolution({ ordsrvnro }: EvolutionProps) {
-    const [evolution, setEvolution] = useState('');
-    const [loading, setLoading] = useState(true);
+export default function Evolution({ ordsrvnro, initialEvolution }: EvolutionProps) {
+    const [evolution, setEvolution] = useState(initialEvolution);
+    const [loading, setLoading] = useState(false);
 
-    const evolutionRef = useRef(evolution);
+    const evolutionRef = useRef(initialEvolution);
+
+    // Sync props
+    useEffect(() => {
+        setEvolution(initialEvolution);
+        evolutionRef.current = initialEvolution;
+    }, [initialEvolution]);
 
     // Update ref whenever evolution changes
     useEffect(() => {
@@ -19,29 +26,13 @@ export default function Evolution({ ordsrvnro }: EvolutionProps) {
     }, [evolution]);
 
     useEffect(() => {
-        let mounted = true;
-        setLoading(true);
-        evolutionService.getEvolution('dummy-token', ordsrvnro)
-            .then(text => {
-                if (mounted) {
-                    setEvolution(text);
-                    setLoading(false);
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                if (mounted) setLoading(false);
-            });
-
+        // Only for unmount save
         return () => {
-            mounted = false;
-
             // Save on unmount
             const textToSave = evolutionRef.current;
-            // logic to determine if we should save (e.g. dirty check or just save if not empty)
-            // matching previous behavior of saving whatever is there
             if (textToSave) {
-                evolutionService.saveEvolution('dummy-token', ordsrvnro, textToSave).catch(err => {
+                const token = localStorage.getItem('gam_access_token') || '';
+                saveEvolution(token, ordsrvnro, textToSave).catch(err => {
                     console.error('Error saving evolution on unmount:', err);
                 });
             }

@@ -12,15 +12,8 @@ export default function Header() {
             <div className="flex items-center gap-4">
                 {/* Placeholder for Hospital Logo - using text if image not available or Icon */}
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-green-700/90 rounded-full grid grid-cols-2 grid-rows-2 p-0.5 gap-0.5 overflow-hidden">
-                        <div className="bg-white rounded-tl-full"></div>
-                        <div className="bg-white rounded-tr-full"></div>
-                        <div className="bg-white rounded-bl-full"></div>
-                        <div className="bg-white rounded-br-full"></div>
-                    </div>
                     <div className="flex flex-col leading-none">
                         <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">Hospital</span>
-                        <span className="text-xl font-black text-green-700 tracking-tight">BSE</span>
                     </div>
                 </div>
             </div>

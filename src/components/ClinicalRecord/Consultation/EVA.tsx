@@ -1,21 +1,28 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { evaService } from '@/services/evaService';
+import { getEVA, saveEVA } from '@/services/evaService';
 import PhysicalExamHistoryModal from './PhysicalExamHistoryModal';
 
 interface EVAProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialValue: number | null;
 }
 
-export default function EVA({ ordsrvnro }: EVAProps) {
-    const [value, setValue] = useState<number | null>(null);
-    const [loading, setLoading] = useState(true);
+export default function EVA({ ordsrvnro, initialValue }: EVAProps) {
+    const [value, setValue] = useState<number | null>(initialValue);
+    const [loading, setLoading] = useState(false);
 
     const [showHistory, setShowHistory] = useState(false);
 
     // Ref to track current value for save on unmount
-    const valueRef = useRef(value);
+    const valueRef = useRef(initialValue);
+
+    // Sync props with state
+    useEffect(() => {
+        setValue(initialValue);
+        valueRef.current = initialValue;
+    }, [initialValue]);
 
     // Update ref whenever value changes
     useEffect(() => {
@@ -23,27 +30,13 @@ export default function EVA({ ordsrvnro }: EVAProps) {
     }, [value]);
 
     useEffect(() => {
-        let mounted = true;
-        setLoading(true);
-        evaService.getEVA('dummy-token', ordsrvnro)
-            .then(val => {
-                if (mounted) {
-                    setValue(val);
-                    setLoading(false);
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                if (mounted) setLoading(false);
-            });
-
+        // Only for unmount save
         return () => {
-            mounted = false;
-
             // Save on unmount
             const valToSave = valueRef.current;
             if (valToSave !== null) {
-                evaService.saveEVA('dummy-token', ordsrvnro, valToSave).catch(err => {
+                const token = localStorage.getItem('gam_access_token') || '';
+                saveEVA(token, ordsrvnro, valToSave).catch(err => {
                     console.error('Error saving EVA on unmount:', err);
                 });
             }

@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { historiaClinicaService, Antecedente, AntecedenteType } from '@/services/historiaClinicaService';
-import { generalService, TerminologyResult } from '@/services/generalService';
+import { getAntecedentes, deleteAntecedente, addAntecedente, Antecedente, AntecedenteType } from '@/services/headerServices';
+import { searchTerminology, TerminologyResult } from '@/services/generalService';
 
 interface BackgroundsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    ordsrvnro: number;
+    ordsrvnro: string;
     onBackgroundsUpdate?: () => void;
 }
 
@@ -24,6 +24,7 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
     const [observations, setObservations] = useState('');
     const [parentesco, setParentesco] = useState('');
     const [isManualEntry, setIsManualEntry] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
         if (isOpen && ordsrvnro) {
@@ -34,8 +35,9 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
     const handleSearch = async () => {
         if (!searchTerm.trim()) return;
         setSearching(true);
+        setErrorMessage(null);
         try {
-            const results = await generalService.searchTerminology(searchTerm);
+            const results = await searchTerminology(searchTerm);
             setSearchResults(results);
         } catch (error) {
             console.error("Search error:", error);
@@ -47,7 +49,8 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
     const loadAntecedentes = async () => {
         setLoading(true);
         try {
-            const data = await historiaClinicaService.getAntecedentes('dummy-token', ordsrvnro);
+            const token = localStorage.getItem('gam_access_token') || '';
+            const data = await getAntecedentes(token, ordsrvnro);
             setAntecedentes(data);
         } catch (error) {
             console.error('Error loading antecedents:', error);
@@ -56,10 +59,11 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
         }
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (key: string, id: string) => {
         try {
-            await historiaClinicaService.deleteAntecedente('dummy-token', ordsrvnro, id);
-            setAntecedentes(antecedentes.filter(a => a.id !== id));
+            const token = localStorage.getItem('gam_access_token') || '';
+            await deleteAntecedente(token, ordsrvnro, key, id);
+            setAntecedentes(antecedentes.filter(a => a.key !== key));
             if (onBackgroundsUpdate) onBackgroundsUpdate();
         } catch (error) {
             console.error('Error deleting antecedent:', error);
@@ -74,16 +78,19 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
         setParentesco('');
         setSearchResults([]);
         setIsManualEntry(false);
+        setErrorMessage(null);
     };
 
     const handleCancelAdd = () => {
         setAddingType(null);
+        setErrorMessage(null);
     };
 
     const handleSelectTerm = (term: TerminologyResult) => {
         setSelectedTerm(term);
         setSearchTerm(term.description);
         setSearchResults([]);
+        setErrorMessage(null);
     };
 
     const handleSave = async () => {
@@ -91,15 +98,41 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
         if (!isManualEntry && !selectedTerm) return;
         if (isManualEntry && !searchTerm.trim()) return;
 
-        try {
-            const description = selectedTerm ? selectedTerm.description : searchTerm;
+        // Validar duplicados
+        const description = selectedTerm ? selectedTerm.description : searchTerm;
+        const newId = selectedTerm ? selectedTerm.id : '0';
 
-            await historiaClinicaService.addAntecedente('dummy-token', ordsrvnro, {
+        const isDuplicate = antecedentes.some(a => {
+            if (a.tipo !== addingType) return false;
+
+            // Comparar por ID si existe y no es 0, o por descripción
+            const sameItem = (newId !== '0' && a.id === newId) ||
+                (a.descripcion.toLowerCase() === description.toLowerCase());
+
+            if (!sameItem) return false;
+
+            // Si es familiar, permitir mismo antecedente solo si es diferente parentesco
+            if (addingType === 'ANT') {
+                return a.parentesco === parentesco;
+            }
+
+            return true;
+        });
+
+        if (isDuplicate) {
+            setErrorMessage('Este antecedente ya se encuentra registrado para el paciente.');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('gam_access_token') || '';
+            await addAntecedente(token, ordsrvnro, {
+                id: newId,
                 descripcion: description,
                 tipo: addingType,
                 fechaRegistro: new Date().toLocaleDateString(),
                 observaciones: observations,
-                parentesco: addingType === 'Familiar' ? parentesco : undefined
+                parentesco: addingType === 'ANT' ? parentesco : undefined
             });
 
             await loadAntecedentes();
@@ -135,6 +168,12 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
 
                 {isAddingThisSection && (
                     <div className="p-4 bg-orange-50/50 border-b border-orange-100 animate-in fade-in slide-in-from-top-2">
+                        {errorMessage && (
+                            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm flex items-center gap-2">
+                                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                {errorMessage}
+                            </div>
+                        )}
                         <div className="flex flex-col gap-4">
                             <div className="relative">
                                 <label className="block text-xs font-bold text-slate-500 mb-1">Buscar término / Descripción</label>
@@ -193,7 +232,7 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
                                 {isManualEntry && <p className="text-[10px] text-orange-600 mt-1">* Ingreso manual activado. El término no estará codificado.</p>}
                             </div>
 
-                            {type === 'Familiar' && (
+                            {type === 'ANT' && (
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Parentesco</label>
                                     <select
@@ -204,10 +243,8 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
                                         <option value="">Seleccione...</option>
                                         <option value="Madre">Madre</option>
                                         <option value="Padre">Padre</option>
-                                        <option value="Hermano/a">Hermano/a</option>
-                                        <option value="Abuelo/a">Abuelo/a</option>
-                                        <option value="Tío/a">Tío/a</option>
-                                        <option value="Hijo/a">Hijo/a</option>
+                                        <option value="Abuelo">Abuelo</option>
+                                        <option value="Hermano">Hermano</option>
                                     </select>
                                 </div>
                             )}
@@ -230,7 +267,7 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
                                 </button>
                                 <button
                                     onClick={handleSave}
-                                    disabled={(!isManualEntry && !selectedTerm) || (isManualEntry && !searchTerm.trim()) || (type === 'Familiar' && !parentesco)}
+                                    disabled={(!isManualEntry && !selectedTerm) || (isManualEntry && !searchTerm.trim()) || (type === 'ANT' && !parentesco)}
                                     className="px-4 py-2 text-sm bg-teal-600 text-white hover:bg-teal-700 rounded font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Guardar
@@ -244,7 +281,7 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
                     <div className="pl-4">Acciones</div>
                     <div>Antecedente</div>
                     <div>Observaciones</div>
-                    {type === 'Familiar' && <div>Parentesco</div>}
+                    {type === 'ANT' && <div>Parentesco</div>}
                 </div>
 
                 {items.length === 0 ? (
@@ -252,10 +289,10 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {items.map(item => (
-                            <div key={item.id} className="grid grid-cols-[80px_1fr_1fr_100px] gap-2 px-4 py-3 items-center hover:bg-slate-50 transition-colors text-sm">
+                            <div key={item.key} className="grid grid-cols-[80px_1fr_1fr_100px] gap-2 px-4 py-3 items-center hover:bg-slate-50 transition-colors text-sm">
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => handleDelete(item.id)}
+                                        onClick={() => handleDelete(item.key, item.id)}
                                         className="w-8 h-8 rounded-full bg-red-100 text-red-500 hover:bg-red-200 flex items-center justify-center transition-colors"
                                         title="Eliminar"
                                     >
@@ -264,7 +301,7 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
                                 </div>
                                 <div className="font-bold text-slate-800">{item.descripcion}</div>
                                 <div className="text-slate-600 truncate">{item.observaciones || '-'}</div>
-                                {type === 'Familiar' && <div className="text-slate-700 font-medium">{item.parentesco}</div>}
+                                {type === 'ANT' && <div className="text-slate-700 font-medium">{item.parentesco}</div>}
                             </div>
                         ))}
                     </div>
@@ -294,9 +331,9 @@ export default function BackgroundsModal({ isOpen, onClose, ordsrvnro, onBackgro
                         </div>
                     ) : (
                         <>
-                            {renderSection('Antecedentes personales', 'Personal')}
-                            {renderSection('Antecedentes familiares', 'Familiar')}
-                            {renderSection('Antecedentes socioeconómicos', 'Socioeconomico')}
+                            {renderSection('Antecedentes personales', 'APE')}
+                            {renderSection('Antecedentes familiares', 'ANT')}
+                            {renderSection('Antecedentes socioeconómicos', 'ASE')}
                         </>
                     )}
                 </div>

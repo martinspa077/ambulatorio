@@ -1,12 +1,12 @@
 'use client';
 
-import { PatientNote, historiaClinicaService } from '@/services/historiaClinicaService';
+import { PatientNote, getPatientNotes, deletePatientNote, addPatientNote } from '@/services/headerServices';
 import { useState, useEffect } from 'react';
 
 interface NotesModalProps {
     isOpen: boolean;
     onClose: () => void;
-    ordsrvnro: number;
+    ordsrvnro: string;
     onNotesUpdate?: () => void;
 }
 
@@ -25,7 +25,8 @@ export default function NotesModal({ isOpen, onClose, ordsrvnro, onNotesUpdate }
     const loadNotes = async () => {
         setLoading(true);
         try {
-            const data = await historiaClinicaService.getPatientNotes('dummy-token', ordsrvnro);
+            const token = localStorage.getItem('gam_access_token') || '';
+            const data = await getPatientNotes(token, ordsrvnro);
             setNotes(data);
         } catch (error) {
             console.error('Error loading notes:', error);
@@ -36,7 +37,8 @@ export default function NotesModal({ isOpen, onClose, ordsrvnro, onNotesUpdate }
 
     const handleDelete = async (noteId: number) => {
         try {
-            await historiaClinicaService.deletePatientNote('dummy-token', ordsrvnro, noteId);
+            const token = localStorage.getItem('gam_access_token') || '';
+            await deletePatientNote(token, ordsrvnro, noteId);
             const updatedNotes = notes.filter(n => n.id !== noteId);
             setNotes(updatedNotes);
             if (onNotesUpdate) onNotesUpdate();
@@ -49,7 +51,8 @@ export default function NotesModal({ isOpen, onClose, ordsrvnro, onNotesUpdate }
         if (!newNote.trim()) return;
         setAdding(true);
         try {
-            await historiaClinicaService.addPatientNote('dummy-token', ordsrvnro, newNote);
+            const token = localStorage.getItem('gam_access_token') || '';
+            await addPatientNote(token, ordsrvnro, newNote);
             setNewNote('');
             loadNotes();
             if (onNotesUpdate) onNotesUpdate();

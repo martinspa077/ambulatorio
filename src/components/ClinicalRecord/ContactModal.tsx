@@ -1,6 +1,6 @@
 'use client';
 
-import { historiaClinicaService, PatientContactInfoResponse, MutualistaContactInfo } from '@/services/historiaClinicaService';
+import { getMutualistas, updateMutualista, PatientContactInfoResponse, MutualistaContactInfo } from '@/services/headerServices';
 import { useState, useEffect } from 'react';
 
 interface ContactModalProps {
@@ -21,7 +21,7 @@ export default function ContactModal({ isOpen, onClose, data, loading }: Contact
         if (data) {
             setCurrentData(data);
         }
-        historiaClinicaService.getMutualistas('dummy-token').then(setAvailableMutualistas);
+        getMutualistas('dummy-token').then(setAvailableMutualistas);
     }, [data]);
 
     const handleMutualistaChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -31,7 +31,7 @@ export default function ContactModal({ isOpen, onClose, data, loading }: Contact
         setUpdating(true);
         try {
             // Update on server
-            await historiaClinicaService.updateMutualista('dummy-token', 12345, newMutualistaName); // Note: ordsrvnro passed as dummy here, ideally should be valid
+            await updateMutualista('dummy-token', '12345', newMutualistaName); // Note: ordsrvnro passed as dummy here, ideally should be valid
 
             // Optimistic update
             setCurrentData({

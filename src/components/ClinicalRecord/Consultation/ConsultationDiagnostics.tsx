@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ConsultationDiagnosis, diagnosticsService, ENOData, SCASTData, ExternalCauseData } from '@/services/diagnosticsService';
+import { ConsultationDiagnosis, checkDiagnosisType, ENOData, SCASTData, ExternalCauseData } from '@/services/diagnosticsService';
 import DiagnosisSearchModal from './DiagnosisSearchModal';
 import ENOFormModal from './ENOFormModal';
 import SCASTFormModal from './SCASTFormModal';
@@ -31,18 +31,20 @@ export default function ConsultationDiagnostics({
     // Effect to handle diagnosis added from parent (e.g. Active Problems)
     useEffect(() => {
         if (diagnosisToAdd) {
-            handleAddDiagnosis(diagnosisToAdd);
-            if (onDiagnosisProcessed) {
-                onDiagnosisProcessed();
-            }
+            const processDiagnosis = async () => {
+                await handleAddDiagnosis(diagnosisToAdd);
+                if (onDiagnosisProcessed) {
+                    onDiagnosisProcessed();
+                }
+            };
+            processDiagnosis();
         }
     }, [diagnosisToAdd]);
 
-    const handleAddDiagnosis = (diagnosis: string, terminologyId?: string) => {
+    const handleAddDiagnosis = async (diagnosis: string) => {
         const newDiagnosis: Partial<ConsultationDiagnosis> = {
             id: Date.now().toString(),
             diagnosis,
-            terminologyId,
             certainty: null,
             type: 'primario',
             isProblem: false,
@@ -51,7 +53,8 @@ export default function ConsultationDiagnostics({
             mspNotification: false
         };
 
-        const type = diagnosticsService.checkDiagnosisType(diagnosis);
+        const token = localStorage.getItem('gam_access_token') || '';
+        const type = await checkDiagnosisType(token, diagnosis);
 
         if (type === 'ENO') {
             setPendingDiagnosis({ ...newDiagnosis, mspNotification: true });
@@ -65,14 +68,18 @@ export default function ConsultationDiagnostics({
         }
     };
 
-    const confirmAddDiagnosis = (finalDiagnosis: ConsultationDiagnosis) => {
-        onDiagnosticsChange([...diagnostics, finalDiagnosis]);
+    const handleSaveDiagnosis = (finalDiagnosis: ConsultationDiagnosis) => {
+        if (diagnostics.some(d => d.id === finalDiagnosis.id)) {
+            handleUpdateDiagnosis(finalDiagnosis.id, finalDiagnosis);
+        } else {
+            onDiagnosticsChange([...diagnostics, finalDiagnosis]);
+        }
         setPendingDiagnosis(null);
     };
 
     const handleENOSave = (data: ENOData) => {
         if (pendingDiagnosis) {
-            confirmAddDiagnosis({
+            handleSaveDiagnosis({
                 ...pendingDiagnosis,
                 mspNotification: true,
                 enoData: data
@@ -83,7 +90,7 @@ export default function ConsultationDiagnostics({
 
     const handleSCASTSave = (data: SCASTData) => {
         if (pendingDiagnosis) {
-            confirmAddDiagnosis({
+            handleSaveDiagnosis({
                 ...pendingDiagnosis,
                 mspNotification: true,
                 scastData: data
@@ -98,14 +105,14 @@ export default function ConsultationDiagnostics({
             setShowExternalCauseForm(true);
         } else {
             if (pendingDiagnosis) {
-                confirmAddDiagnosis(pendingDiagnosis as ConsultationDiagnosis);
+                handleSaveDiagnosis(pendingDiagnosis as ConsultationDiagnosis);
             }
         }
     };
 
     const handleExternalCauseSave = (data: ExternalCauseData) => {
         if (pendingDiagnosis) {
-            confirmAddDiagnosis({
+            handleSaveDiagnosis({
                 ...pendingDiagnosis,
                 mspNotification: true,
                 externalCauseData: data
@@ -122,6 +129,21 @@ export default function ConsultationDiagnostics({
 
     const handleDeleteDiagnosis = (id: string) => {
         onDiagnosticsChange(diagnostics.filter(d => d.id !== id));
+    };
+
+    const handleEditENO = (diagnosis: ConsultationDiagnosis) => {
+        setPendingDiagnosis(diagnosis);
+        setShowENOForm(true);
+    };
+
+    const handleEditSCAST = (diagnosis: ConsultationDiagnosis) => {
+        setPendingDiagnosis(diagnosis);
+        setShowSCASTForm(true);
+    };
+
+    const handleEditExternalCause = (diagnosis: ConsultationDiagnosis) => {
+        setPendingDiagnosis(diagnosis);
+        setShowExternalCauseForm(true);
     };
 
     return (
@@ -169,6 +191,9 @@ export default function ConsultationDiagnostics({
                         diagnosis={diagnosis}
                         onUpdate={(updates) => handleUpdateDiagnosis(diagnosis.id, updates)}
                         onDelete={() => handleDeleteDiagnosis(diagnosis.id)}
+                        onEditENO={() => handleEditENO(diagnosis)}
+                        onEditSCAST={() => handleEditSCAST(diagnosis)}
+                        onEditExternalCause={() => handleEditExternalCause(diagnosis)}
                     />
                 ))}
 
@@ -221,6 +246,7 @@ export default function ConsultationDiagnostics({
                 onClose={() => setShowENOForm(false)}
                 onSave={handleENOSave}
                 diagnosisName={pendingDiagnosis?.diagnosis || ''}
+                initialData={pendingDiagnosis?.enoData}
             />
 
             <SCASTFormModal
@@ -229,6 +255,7 @@ export default function ConsultationDiagnostics({
                 onClose={() => setShowSCASTForm(false)}
                 onSave={handleSCASTSave}
                 diagnosisName={pendingDiagnosis?.diagnosis || ''}
+                initialData={pendingDiagnosis?.scastData}
             />
 
             <ExternalCauseFormModal
@@ -237,6 +264,7 @@ export default function ConsultationDiagnostics({
                 onClose={() => setShowExternalCauseForm(false)}
                 onSave={handleExternalCauseSave}
                 diagnosisName={pendingDiagnosis?.diagnosis || ''}
+                initialData={pendingDiagnosis?.externalCauseData}
             />
         </div>
     );
@@ -247,33 +275,92 @@ interface DiagnosisItemProps {
     diagnosis: ConsultationDiagnosis;
     onUpdate: (updates: Partial<ConsultationDiagnosis>) => void;
     onDelete: () => void;
+    onEditENO: () => void;
+    onEditSCAST: () => void;
+    onEditExternalCause: () => void;
 }
 
-function DiagnosisItem({ diagnosis, onUpdate, onDelete }: DiagnosisItemProps) {
+function DiagnosisItem({
+    diagnosis,
+    onUpdate,
+    onDelete,
+    onEditENO,
+    onEditSCAST,
+    onEditExternalCause
+}: DiagnosisItemProps) {
     const [showCertaintyTooltip, setShowCertaintyTooltip] = useState(false);
     const [showTypeTooltip, setShowTypeTooltip] = useState(false);
     const [showProblemTooltip, setShowProblemTooltip] = useState(false);
 
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl p-6 space-y-4">
-            {/* Diagnosis Name & MSP Badge */}
+            {/* Diagnosis Name & Badges */}
             <div className="flex justify-between items-start">
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-                        Problema Diagnóstico
-                    </label>
-                    <div className="text-lg font-bold text-[#005F61] dark:text-teal-400">
-                        {diagnosis.diagnosis}
+                <div className="flex flex-col gap-2">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                            Problema Diagnóstico
+                        </label>
+                        <div className="text-lg font-bold text-[#005F61] dark:text-teal-400">
+                            {diagnosis.diagnosis}
+                        </div>
+                    </div>
+
+                    {/* Data Badges */}
+                    <div className="flex flex-wrap gap-2">
+                        {diagnosis.mspNotification && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-lg border border-teal-200 dark:border-teal-700/50 text-xs font-medium" title="Notificación MSP Activa">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <span>MSP</span>
+                            </div>
+                        )}
+
+                        {/* ENO Badge/Edit */}
+                        {diagnosis.enoData && (
+                            <button
+                                onClick={onEditENO}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg border border-orange-200 dark:border-orange-700/50 text-xs font-medium hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                <span>ENO: {diagnosis.enoData.symptomStartDate}</span>
+                            </button>
+                        )}
+
+                        {/* SCAST Badge/Edit */}
+                        {diagnosis.scastData && (
+                            <button
+                                onClick={onEditSCAST}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded-lg border border-rose-200 dark:border-rose-700/50 text-xs font-medium hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                </svg>
+                                <span>SCAST: {diagnosis.scastData.reperfusionStrategy}</span>
+                            </button>
+                        )}
+
+                        {/* External Cause Badge/Edit */}
+                        {diagnosis.externalCauseData && (
+                            <button
+                                onClick={onEditExternalCause}
+                                className="flex items-center gap-1.5 px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-200 dark:border-blue-700/50 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <span>Lesión: {diagnosis.externalCauseData.intentionality}</span>
+                            </button>
+                        )}
                     </div>
                 </div>
-                {diagnosis.mspNotification && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-lg border border-teal-200 dark:border-teal-700/50 text-xs font-medium" title="Notificación MSP Activa">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        <span>MSP</span>
-                    </div>
-                )}
+
+                <div className="flex items-center gap-2">
+                    {/* Actions if any */}
+                </div>
             </div>
 
             {/* Form Fields Row 1 */}

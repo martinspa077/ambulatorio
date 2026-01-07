@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { surgicalProceduresService, SurgicalProcedure } from '@/services/surgicalProceduresService';
+import { getProcedures } from '@/services/surgicalProceduresService';
+import { SurgicalProcedure } from '@/services/surgicalProceduresTypes';
 
 interface SurgicalSearchModalProps {
     isOpen: boolean;
@@ -41,7 +42,7 @@ export default function SurgicalSearchModal({ isOpen, onClose, onConfirm }: Surg
             // Only search if length > 1 or empty (to show all?) Prompt says "despliega todas las opciones".
             setSearching(true);
             try {
-                const results = await surgicalProceduresService.getProcedures(searchTerm);
+                const results = await getProcedures(searchTerm);
                 setSearchResults(results);
             } catch (error) {
                 console.error(error);

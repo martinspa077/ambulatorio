@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ExternalCauseData } from '@/services/diagnosticsService';
 
 interface ExternalCauseFormModalProps {
@@ -8,14 +8,30 @@ interface ExternalCauseFormModalProps {
     onClose: () => void;
     onSave: (data: ExternalCauseData) => void;
     diagnosisName: string;
+    initialData?: ExternalCauseData;
 }
 
-export default function ExternalCauseFormModal({ isOpen, onClose, onSave, diagnosisName }: ExternalCauseFormModalProps) {
+export default function ExternalCauseFormModal({ isOpen, onClose, onSave, diagnosisName, initialData }: ExternalCauseFormModalProps) {
     const [intentionality, setIntentionality] = useState<ExternalCauseData['intentionality'] | ''>('');
     const [mechanism, setMechanism] = useState<ExternalCauseData['mechanism'] | ''>('');
     const [role, setRole] = useState<ExternalCauseData['role'] | ''>('');
 
+    useEffect(() => {
+        if (isOpen) {
+            if (initialData) {
+                setIntentionality(initialData.intentionality || '');
+                setMechanism(initialData.mechanism || '');
+                setRole(initialData.role || '');
+            } else {
+                setIntentionality('');
+                setMechanism('');
+                setRole('');
+            }
+        }
+    }, [isOpen, initialData]);
+
     if (!isOpen) return null;
+    // ... rest
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

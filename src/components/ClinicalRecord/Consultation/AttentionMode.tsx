@@ -1,50 +1,35 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { attentionModeService, AttentionModeType } from '@/services/attentionModeService';
+import { getAttentionMode, saveAttentionMode, AttentionModeType } from '@/services/attentionModeService';
 
 interface AttentionModeProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialMode: AttentionModeType;
 }
 
-export default function AttentionMode({ ordsrvnro }: AttentionModeProps) {
-    const [mode, setMode] = useState<AttentionModeType>('Presencial');
-    const [loading, setLoading] = useState(true);
-    const modeRef = useRef<AttentionModeType>('Presencial'); // Ref to keep track of latest value for unmount save
+export default function AttentionMode({ ordsrvnro, initialMode }: AttentionModeProps) {
+    const [mode, setMode] = useState<AttentionModeType>(initialMode);
+    const [loading, setLoading] = useState(false);
+    const modeRef = useRef<AttentionModeType>(initialMode);
 
+    // Sync with props if they change
     useEffect(() => {
-        let mounted = true;
-
-        const fetchMode = async () => {
-            try {
-                const data = await attentionModeService.getAttentionMode('dummy-token', ordsrvnro);
-                if (mounted) {
-                    setMode(data);
-                    modeRef.current = data;
-                    setLoading(false);
-                }
-            } catch (error) {
-                console.error('Error fetching attention mode:', error);
-                if (mounted) setLoading(false);
-            }
-        };
-
-        fetchMode();
-
-        return () => {
-            mounted = false;
-        };
-    }, [ordsrvnro]);
+        setMode(initialMode);
+        modeRef.current = initialMode;
+    }, [initialMode]);
 
     // Save on unmount
     useEffect(() => {
         return () => {
             // Only save if data was loaded to avoid overwriting with default on quick unmounts before fetch
-            if (!loading) {
-                attentionModeService.saveAttentionMode('dummy-token', ordsrvnro, modeRef.current);
+            const hasChanged = modeRef.current !== initialMode;
+            if (!loading && hasChanged) {
+                const token = localStorage.getItem('gam_access_token') || '';
+                saveAttentionMode(token, ordsrvnro, modeRef.current);
             }
         };
-    }, [ordsrvnro, loading]);
+    }, [ordsrvnro, loading, initialMode]);
 
     const handleChange = (newMode: AttentionModeType) => {
         setMode(newMode);

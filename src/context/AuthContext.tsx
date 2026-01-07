@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authService, UserProfile, AuthResponse } from '@/services/auth';
+import { login as loginService, getUserProfile, UserProfile, AuthResponse } from '@/services/auth';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const token = localStorage.getItem('gam_access_token');
             if (token) {
                 try {
-                    const profile = await authService.getUserProfile(token);
+                    const profile = await getUserProfile(token);
                     setUser(profile);
                 } catch (error) {
                     console.error('Failed to restore session', error);
@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-            const response: AuthResponse = await authService.login(username, password);
+            const response: AuthResponse = await loginService(username, password);
             console.log('Login successful, response received:', response);
 
             // Store in localStorage for client-side
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log(`Tokens stored in localStorage and cookies (max-age: ${maxAge}s)`);
 
             console.log('Fetching user profile...');
-            const profile = await authService.getUserProfile(response.access_token);
+            const profile = await getUserProfile(response.access_token);
             console.log('Profile fetched:', profile);
 
             setUser(profile);

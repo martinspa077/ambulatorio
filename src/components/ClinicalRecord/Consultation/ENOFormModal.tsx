@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ENOData } from '@/services/diagnosticsService';
 
 interface ENOFormModalProps {
@@ -8,13 +8,27 @@ interface ENOFormModalProps {
     onClose: () => void;
     onSave: (data: ENOData) => void;
     diagnosisName: string;
+    initialData?: ENOData;
 }
 
-export default function ENOFormModal({ isOpen, onClose, onSave, diagnosisName }: ENOFormModalProps) {
+export default function ENOFormModal({ isOpen, onClose, onSave, diagnosisName, initialData }: ENOFormModalProps) {
     const [startDate, setStartDate] = useState('');
     const [contact, setContact] = useState<'yes' | 'no' | null>(null);
 
+    useEffect(() => {
+        if (isOpen) {
+            if (initialData) {
+                setStartDate(initialData.symptomStartDate || '');
+                setContact(initialData.contactWithSuspiciousCase ? 'yes' : 'no');
+            } else {
+                setStartDate('');
+                setContact(null);
+            }
+        }
+    }, [isOpen, initialData]);
+
     if (!isOpen) return null;
+    // ... rest of component
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -57,8 +71,8 @@ export default function ENOFormModal({ isOpen, onClose, onSave, diagnosisName }:
                         </label>
                         <div className="flex gap-4">
                             <label className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-colors flex items-center justify-center gap-2 font-bold ${contact === 'yes'
-                                    ? 'border-[#005F61] bg-teal-50 text-[#005F61]'
-                                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                                ? 'border-[#005F61] bg-teal-50 text-[#005F61]'
+                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
                                 }`}>
                                 <input
                                     type="radio"
@@ -70,8 +84,8 @@ export default function ENOFormModal({ isOpen, onClose, onSave, diagnosisName }:
                                 Sí
                             </label>
                             <label className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-colors flex items-center justify-center gap-2 font-bold ${contact === 'no'
-                                    ? 'border-[#005F61] bg-teal-50 text-[#005F61]'
-                                    : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                                ? 'border-[#005F61] bg-teal-50 text-[#005F61]'
+                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
                                 }`}>
                                 <input
                                     type="radio"

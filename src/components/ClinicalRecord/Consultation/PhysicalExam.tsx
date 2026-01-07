@@ -1,11 +1,30 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { physicalExamService, PhysicalExamData } from '@/services/physicalExamService';
+import { getPhysicalExam, savePhysicalExam, getPhysicalExamHistory, PhysicalExamData } from '@/services/physicalExamService';
 import PhysicalExamHistoryModal from './PhysicalExamHistoryModal';
 
 interface PhysicalExamProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialData: PhysicalExamData;
+}
+
+// Local interface for form state where numeric values are strings to allow typing decimals
+interface PhysicalExamFormState {
+    paSistolica?: string;
+    paDiastolica?: string;
+    frecuenciaCardiaca?: string;
+    temperatura?: string;
+    frecuenciaRespiratoria?: string;
+    saturacionOxigeno?: string;
+    hgt?: string;
+    peso?: string;
+    talla?: string;
+    imc?: string; // or number, but string is consistent for display
+    lastUpdate?: string;
+    professionalName?: string;
+    specialty?: string;
+    mode: 'display' | 'update';
 }
 
 interface ExamItemProps {
@@ -75,44 +94,78 @@ const ExamItem = ({ icon, label, unit, value, onChange, onBlur, readOnly, color 
     </div>
 );
 
-export default function PhysicalExam({ ordsrvnro }: PhysicalExamProps) {
-    const [data, setData] = useState<PhysicalExamData>({} as PhysicalExamData);
-    const [loading, setLoading] = useState(true);
+export default function PhysicalExam({ ordsrvnro, initialData }: PhysicalExamProps) {
+    // Helper to convert API data to Form State (numbers to strings)
+    const toFormState = (data: PhysicalExamData): PhysicalExamFormState => ({
+        ...data,
+        paSistolica: data.paSistolica?.toString() || '',
+        paDiastolica: data.paDiastolica?.toString() || '',
+        frecuenciaCardiaca: data.frecuenciaCardiaca?.toString() || '',
+        temperatura: data.temperatura?.toString() || '',
+        frecuenciaRespiratoria: data.frecuenciaRespiratoria?.toString() || '',
+        saturacionOxigeno: data.saturacionOxigeno?.toString() || '',
+        hgt: data.hgt?.toString() || '',
+        peso: data.peso?.toString() || '',
+        talla: data.talla?.toString() || '',
+        imc: data.imc?.toString() || '',
+    });
+
+    // Helper to convert Form State back to API Data (strings to numbers)
+    const toApiData = (form: PhysicalExamFormState): PhysicalExamData => {
+        const parse = (val?: string) => (val && val.trim() !== '' ? Number(val) : undefined);
+        return {
+            ...form,
+            paSistolica: parse(form.paSistolica),
+            paDiastolica: parse(form.paDiastolica),
+            frecuenciaCardiaca: parse(form.frecuenciaCardiaca),
+            temperatura: parse(form.temperatura),
+            frecuenciaRespiratoria: parse(form.frecuenciaRespiratoria),
+            saturacionOxigeno: parse(form.saturacionOxigeno),
+            hgt: parse(form.hgt),
+            peso: parse(form.peso),
+            talla: parse(form.talla),
+            imc: parse(form.imc),
+        };
+    };
+
+    const [data, setData] = useState<PhysicalExamFormState>(toFormState(initialData));
+    const [loading, setLoading] = useState(false);
     const [historyModal, setHistoryModal] = useState<{ isOpen: boolean; type: keyof PhysicalExamData | 'pa'; title: string; unit?: string }>({
         isOpen: false,
         type: 'frecuenciaCardiaca',
         title: '',
     });
 
+    // Sync props with state
     useEffect(() => {
-        const loadData = async () => {
-            try {
-                const result = await physicalExamService.getPhysicalExam('dummy-token', ordsrvnro);
-                setData(result);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadData();
-    }, [ordsrvnro]);
+        setData(toFormState(initialData));
+    }, [initialData]);
 
-    const handleChange = (field: keyof PhysicalExamData, value: string) => {
+    const handleChange = (field: keyof PhysicalExamFormState, value: string) => {
+        // Validate input: Numbers and up to 2 decimal places
+        if (value !== '' && !/^\d*\.?\d{0,2}$/.test(value)) {
+            return;
+        }
+
         setData(prev => {
-            const newData = { ...prev, [field]: value === '' ? undefined : Number(value) };
+            // Allow string update directly
+            const newData = { ...prev, [field]: value };
 
             // Calculate BMI if Weight or Height changes
             if (field === 'peso' || field === 'talla') {
-                const weight = field === 'peso' ? Number(value) : prev.peso;
-                const heightCm = field === 'talla' ? Number(value) : prev.talla;
+                const weightVal = field === 'peso' ? value : prev.peso;
+                const heightVal = field === 'talla' ? value : prev.talla;
+
+                const weight = weightVal ? parseFloat(weightVal) : undefined;
+                const heightCm = heightVal ? parseFloat(heightVal) : undefined;
 
                 if (weight && heightCm && heightCm > 0) {
                     const heightM = heightCm / 100;
                     const bmi = weight / (heightM * heightM);
-                    newData.imc = parseFloat(bmi.toFixed(2));
+                    newData.imc = bmi.toFixed(2);
                 } else {
-                    newData.imc = undefined; // Or keep previous if preferred, but usually clear if invalid
+                    // Start clearing if invalid? Or keep old? Let's clear if invalid input.
+                    newData.imc = '';
                 }
             }
             return newData;
@@ -123,26 +176,31 @@ export default function PhysicalExam({ ordsrvnro }: PhysicalExamProps) {
         setHistoryModal({ isOpen: true, type, title, unit });
     };
 
-    // Ref to track current data for save on unmount
-    const dataRef = useRef(data);
+    // Ref to track current data for save on unmount (converted to API format)
+    const dataRef = useRef(toApiData(data));
 
     // Update ref whenever data changes
     useEffect(() => {
-        dataRef.current = data;
+        dataRef.current = toApiData(data);
     }, [data]);
 
     // Save on unmount
     useEffect(() => {
         return () => {
             const dataToSave = dataRef.current;
-            // Only save if we have data to save
-            if (Object.keys(dataToSave).length > 0) {
-                physicalExamService.savePhysicalExam('dummy-token', ordsrvnro, dataToSave).catch((err) => {
+            // Compare with initialData to see if changed.
+            // Note: need to be careful with comparison as initialData has numbers and dataToSave has numbers (possibly different due to string->number roundtrip?)
+            // Usually fine: 38 (number) === 38 (number).
+            const hasChanged = JSON.stringify(dataToSave) !== JSON.stringify(initialData);
+
+            if (hasChanged && Object.keys(dataToSave).length > 0) {
+                const token = localStorage.getItem('gam_access_token') || '';
+                savePhysicalExam(token, ordsrvnro, dataToSave).catch((err) => {
                     console.error('Error saving physical exam on unmount:', err);
                 });
             }
         };
-    }, [ordsrvnro]);
+    }, [ordsrvnro, initialData]);
 
     // Icons
     const HeartIcon = <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /><path d="M12 5 9.04 11l-3-3L12 19l4.54-9-2.5-3.5" /></svg>; // Combined heart rate-ish
@@ -278,16 +336,16 @@ export default function PhysicalExam({ ordsrvnro }: PhysicalExamProps) {
                         onClick={() => setData(prev => ({
                             ...prev,
                             mode: 'update',
-                            paSistolica: undefined,
-                            paDiastolica: undefined,
-                            frecuenciaCardiaca: undefined,
-                            temperatura: undefined,
-                            frecuenciaRespiratoria: undefined,
-                            saturacionOxigeno: undefined,
-                            hgt: undefined,
-                            peso: undefined,
-                            talla: undefined,
-                            imc: undefined
+                            paSistolica: '',
+                            paDiastolica: '',
+                            frecuenciaCardiaca: '',
+                            temperatura: '',
+                            frecuenciaRespiratoria: '',
+                            saturacionOxigeno: '',
+                            hgt: '',
+                            peso: '',
+                            talla: '',
+                            imc: ''
                         }))}
                         className="bg-[#005F61] text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-[#004d4f] transition-colors flex items-center gap-2"
                     >

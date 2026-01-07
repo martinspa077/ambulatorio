@@ -2,7 +2,7 @@
 
 import PageLayout from '@/components/Navigation/PageLayout';
 import { useAuth } from '@/context/AuthContext';
-import { agendaService, AgendaResponse, Cita } from '@/services/agendaService';
+import { getAvailableAgendas, getAgenda, getInasistenciaData, confirmInasistencia, AgendaResponse, Cita } from '@/services/scheduleService';
 import { callerService } from '@/services/callerService';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
@@ -14,7 +14,7 @@ export default function AgendaPage() {
     const [fetching, setFetching] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [modality, setModality] = useState('Todos');
-    const [callingId, setCallingId] = useState<number | null>(null);
+    const [callingId, setCallingId] = useState<string | null>(null);
     const [teleNotice, setTeleNotice] = useState<string | null>(null);
     const [availableAgendas, setAvailableAgendas] = useState<any[]>([]);
     const [selectedAgendaId, setSelectedAgendaId] = useState<number | null>(null);
@@ -23,7 +23,7 @@ export default function AgendaPage() {
     // Inasistencia Modal State
     const [showInasistencia, setShowInasistencia] = useState(false);
     const [inasistenciaDetail, setInasistenciaDetail] = useState<any>(null);
-    const [inasistenciaCitaId, setInasistenciaCitaId] = useState<number | null>(null);
+    const [inasistenciaCitaId, setInasistenciaCitaId] = useState<string | null>(null);
     const [inasistenciaObs, setInasistenciaObs] = useState('');
     const [inasistenciaPass, setInasistenciaPass] = useState('');
     const [inasistenciaSubmitting, setInasistenciaSubmitting] = useState(false);
@@ -39,10 +39,10 @@ export default function AgendaPage() {
             if (isAuthenticated) {
                 setFetching(true);
                 try {
-                    const agendas = await agendaService.getAvailableAgendas('dummy-token');
+                    const agendas = await getAvailableAgendas(localStorage.getItem('gam_access_token') || '');
                     setAvailableAgendas(agendas);
                     if (agendas.length > 0 && !selectedAgendaId) {
-                        setSelectedAgendaId(agendas[0].agendaId);
+                        setSelectedAgendaId(Number(agendas[0].agendaId));
                     }
                 } catch (error) {
                     console.error('Error loading agendas:', error);
@@ -59,7 +59,7 @@ export default function AgendaPage() {
             if (isAuthenticated && selectedAgendaId) {
                 setFetching(true);
                 try {
-                    const data = await agendaService.getAgenda('dummy-token', selectedAgendaId);
+                    const data = await getAgenda(localStorage.getItem('gam_access_token') || '', Number(selectedAgendaId));
                     setAgendaData(data);
                 } catch (error) {
                     console.error('Error loading agenda data:', error);
@@ -70,6 +70,12 @@ export default function AgendaPage() {
         };
         loadAgendaData();
     }, [isAuthenticated, selectedAgendaId]);
+
+    // Derived state for selected agenda details
+    const selectedAgenda = useMemo(() => {
+        if (!selectedAgendaId) return undefined;
+        return availableAgendas.find(a => Number(a.agendaId) === Number(selectedAgendaId));
+    }, [availableAgendas, selectedAgendaId]);
 
     // Client-side filtering logic
     const filteredCitas = useMemo(() => {
@@ -102,7 +108,7 @@ export default function AgendaPage() {
 
     const handleCallPatient = (cita: Cita) => {
         // Feedback effect
-        setCallingId(cita.citaId);
+        setCallingId(cita.ordsrvnro);
         setTimeout(() => setCallingId(null), 1000);
 
         if (cita.modalidad === 'Teleasistencia') {
@@ -119,12 +125,12 @@ export default function AgendaPage() {
         });
     };
 
-    const handleOpenInasistencia = async (citaId: number) => {
+    const handleOpenInasistencia = async (ordsrvnro: string) => {
         setFetching(true);
         try {
-            const data = await agendaService.getInasistenciaData('dummy-token', citaId);
+            const data = await getInasistenciaData(localStorage.getItem('gam_access_token') || '', ordsrvnro);
             setInasistenciaDetail(data);
-            setInasistenciaCitaId(citaId);
+            setInasistenciaCitaId(ordsrvnro);
             setInasistenciaObs('');
             setInasistenciaPass('');
             setShowInasistencia(true);
@@ -139,15 +145,15 @@ export default function AgendaPage() {
         if (!inasistenciaCitaId) return;
         setInasistenciaSubmitting(true);
         try {
-            await agendaService.confirmInasistencia('dummy-token', {
-                citaId: inasistenciaCitaId,
+            await confirmInasistencia(localStorage.getItem('gam_access_token') || '', {
+                ordsrvnro: inasistenciaCitaId,
                 observacion: inasistenciaObs,
                 password: inasistenciaPass
             });
             setShowInasistencia(false);
             // Refresh agenda to reflect changes
             if (selectedAgendaId) {
-                const data = await agendaService.getAgenda('dummy-token', selectedAgendaId);
+                const data = await getAgenda(localStorage.getItem('gam_access_token') || '', selectedAgendaId);
                 setAgendaData(data);
             }
         } catch (error: any) {
@@ -167,10 +173,10 @@ export default function AgendaPage() {
 
     const getStatusStyles = (estado: string) => {
         switch (estado) {
-            case 'asistio': return { dot: 'bg-green-500', text: 'text-green-700' };
-            case 'espera': return { dot: 'bg-amber-400', text: 'text-amber-700' };
-            case 'inasistio': return { dot: 'bg-red-500', text: 'text-red-700' };
-            case 'no_anunciado': return { dot: 'bg-slate-400', text: 'text-slate-700' };
+            case 'CUM': return { dot: 'bg-green-500', text: 'text-green-700' };
+            case 'PDE': return { dot: 'bg-amber-400', text: 'text-amber-700' };
+            case 'INA': return { dot: 'bg-red-500', text: 'text-red-700' };
+            case 'PDR': return { dot: 'bg-slate-400', text: 'text-slate-700' };
             default: return { dot: 'bg-slate-300', text: 'text-slate-600' };
         }
     };
@@ -223,18 +229,18 @@ export default function AgendaPage() {
                         </div>
 
                         {/* Selected Agenda Details */}
-                        {selectedAgendaId && availableAgendas.find(a => a.agendaId === selectedAgendaId) && (
+                        {selectedAgenda && (
                             <div className="flex items-center gap-10 animate-in fade-in slide-in-from-left-4 duration-500">
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-tighter">Especialidad:</span>
                                     <span className="text-sm font-bold text-teal-700 dark:text-teal-400">
-                                        {availableAgendas.find(a => a.agendaId === selectedAgendaId)?.especialidad}
+                                        {selectedAgenda.especialidad}
                                     </span>
                                 </div>
                                 <div className="flex items-center gap-2 border-l border-slate-300 dark:border-slate-700 pl-10">
                                     <span className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-tighter">Coordinados:</span>
                                     <span className="text-sm font-bold text-teal-700 dark:text-teal-400">
-                                        {availableAgendas.find(a => a.agendaId === selectedAgendaId)?.coordinados}
+                                        {selectedAgenda.coordinados}
                                     </span>
                                 </div>
                             </div>
@@ -291,33 +297,33 @@ export default function AgendaPage() {
                             count={agendaData?.resumen.asistencias}
                             label="Asistencias"
                             color="bg-green-500"
-                            status="asistio"
-                            active={statusFilter === 'asistio'}
-                            onClick={() => setStatusFilter(statusFilter === 'asistio' ? null : 'asistio')}
+                            status="CUM"
+                            active={statusFilter === 'CUM'}
+                            onClick={() => setStatusFilter(statusFilter === 'CUM' ? null : 'CUM')}
                         />
                         <SummaryBadge
                             count={agendaData?.resumen.sinAnunciar}
                             label="Sin anunciar"
                             color="bg-slate-400"
-                            status="no_anunciado"
-                            active={statusFilter === 'no_anunciado'}
-                            onClick={() => setStatusFilter(statusFilter === 'no_anunciado' ? null : 'no_anunciado')}
+                            status="PDR"
+                            active={statusFilter === 'PDR'}
+                            onClick={() => setStatusFilter(statusFilter === 'PDR' ? null : 'PDR')}
                         />
                         <SummaryBadge
                             count={agendaData?.resumen.enEspera}
                             label="En espera"
                             color="bg-amber-400"
-                            status="espera"
-                            active={statusFilter === 'espera'}
-                            onClick={() => setStatusFilter(statusFilter === 'espera' ? null : 'espera')}
+                            status="PDE"
+                            active={statusFilter === 'PDE'}
+                            onClick={() => setStatusFilter(statusFilter === 'PDE' ? null : 'PDE')}
                         />
                         <SummaryBadge
                             count={agendaData?.resumen.inasistencias}
                             label="Inasistencia"
                             color="bg-red-500"
-                            status="inasistio"
-                            active={statusFilter === 'inasistio'}
-                            onClick={() => setStatusFilter(statusFilter === 'inasistio' ? null : 'inasistio')}
+                            status="INA"
+                            active={statusFilter === 'INA'}
+                            onClick={() => setStatusFilter(statusFilter === 'INA' ? null : 'INA')}
                         />
                     </div>
                 </div>
@@ -357,7 +363,7 @@ export default function AgendaPage() {
 
                                         return (
                                             <tr
-                                                key={cita.citaId}
+                                                key={`${cita.ordsrvnro}-${idx}`}
                                                 className={`border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/30' : ''}`}
                                             >
                                                 <td className="px-4 py-4 font-bold text-slate-700 dark:text-slate-300">{cita.hora}</td>
@@ -365,12 +371,12 @@ export default function AgendaPage() {
                                                 <td className="px-4 py-4">
                                                     <button
                                                         onClick={() => handleCallPatient(cita)}
-                                                        className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all ${callingId === cita.citaId ? 'scale-125 bg-teal-500 text-white border-teal-500 shadow-lg shadow-teal-500/30' : 'border-slate-200 dark:border-slate-700 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20'}`}
+                                                        className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all ${callingId === cita.ordsrvnro ? 'scale-125 bg-teal-500 text-white border-teal-500 shadow-lg shadow-teal-500/30' : 'border-slate-200 dark:border-slate-700 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20'}`}
                                                     >
                                                         {cita.modalidad === 'Teleasistencia' ? (
-                                                            <svg className={`w-5 h-5 ${callingId === cita.citaId ? 'animate-bounce' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                                            <svg className={`w-5 h-5 ${callingId === cita.ordsrvnro ? 'animate-bounce' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                                                         ) : (
-                                                            <svg className={`w-5 h-5 ${callingId === cita.citaId ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                                                            <svg className={`w-5 h-5 ${callingId === cita.ordsrvnro ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                                                         )}
                                                     </button>
                                                 </td>
@@ -383,17 +389,17 @@ export default function AgendaPage() {
                                                 <td className="px-4 py-4">
                                                     <button
                                                         onClick={() => {
-                                                            if (cita.estado !== 'inasistio' && cita.estado !== 'espera') {
-                                                                handleOpenInasistencia(cita.citaId);
+                                                            if (cita.estado !== 'INA' && cita.estado !== 'PDE') {
+                                                                handleOpenInasistencia(cita.ordsrvnro);
                                                             }
                                                         }}
-                                                        className={`px-4 py-1.5 rounded-lg border text-xs font-bold transition-all ${cita.estado === 'inasistio' || cita.estado === 'espera' ? 'border-sky-500 text-sky-600 hover:bg-sky-50' : 'border-slate-300 text-slate-500 hover:bg-slate-50'}`}
+                                                        className={`px-4 py-1.5 rounded-lg border text-xs font-bold transition-all ${cita.estado === 'INA' || cita.estado === 'PDE' ? 'border-sky-500 text-sky-600 hover:bg-sky-50' : 'border-slate-300 text-slate-500 hover:bg-slate-50'}`}
                                                     >
-                                                        {cita.estado === 'inasistio' || cita.estado === 'espera' ? 'Deshacer' : 'No asistió'}
+                                                        {cita.estado === 'INA' || cita.estado === 'PDE' ? 'Deshacer' : 'No asistió'}
                                                     </button>
                                                 </td>
                                                 <td className="px-4 py-4 text-sm">
-                                                    <a href={`/historia-clinica/${cita.citaId}`} className="font-bold text-teal-700 dark:text-teal-400 hover:underline">{cita.pacienteNombre}</a>
+                                                    <a href={`/historia-clinica/${cita.ordsrvnro}`} className="font-bold text-teal-700 dark:text-teal-400 hover:underline">{cita.pacienteNombre}</a>
                                                 </td>
                                                 <td className="px-4 py-4 text-xs font-bold text-slate-600 dark:text-slate-400">{cita.pacienteDocumento}</td>
                                                 <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-400">{cita.modalidad}</td>

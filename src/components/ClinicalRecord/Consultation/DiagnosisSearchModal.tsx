@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { generalService, TerminologyResult } from '@/services/generalService';
+import { searchTerminology, TerminologyResult } from '@/services/generalService';
 
 interface DiagnosisSearchModalProps {
     isOpen: boolean;
@@ -26,7 +26,7 @@ export default function DiagnosisSearchModal({ isOpen, onClose, onSelect }: Diag
         setHasSearched(true);
 
         try {
-            const results = await generalService.searchTerminology(searchTerm);
+            const results = await searchTerminology(searchTerm);
             setSearchResults(results);
         } catch (error) {
             console.error('Terminology search error:', error);

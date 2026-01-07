@@ -1,17 +1,24 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { nonPharmacologicalService } from '@/services/nonPharmacologicalService';
+import { getIndications, saveIndications } from '@/services/nonPharmacologicalService';
 
 interface NonPharmacologicalIndicationsProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialText: string;
 }
 
-export default function NonPharmacologicalIndications({ ordsrvnro }: NonPharmacologicalIndicationsProps) {
-    const [text, setText] = useState('');
-    const [loading, setLoading] = useState(true);
+export default function NonPharmacologicalIndications({ ordsrvnro, initialText }: NonPharmacologicalIndicationsProps) {
+    const [text, setText] = useState(initialText);
+    const [loading, setLoading] = useState(false);
 
-    const textRef = useRef(text);
+    const textRef = useRef(initialText);
+
+    // Sync props
+    useEffect(() => {
+        setText(initialText);
+        textRef.current = initialText;
+    }, [initialText]);
 
     // Update ref whenever text changes
     useEffect(() => {
@@ -19,27 +26,13 @@ export default function NonPharmacologicalIndications({ ordsrvnro }: NonPharmaco
     }, [text]);
 
     useEffect(() => {
-        let mounted = true;
-        setLoading(true);
-        nonPharmacologicalService.getIndications('dummy-token', ordsrvnro)
-            .then(data => {
-                if (mounted) {
-                    setText(data);
-                    setLoading(false);
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                if (mounted) setLoading(false);
-            });
-
+        // Only for unmount save
         return () => {
-            mounted = false;
-
             // Save on unmount
             const textToSave = textRef.current;
             if (textToSave) {
-                nonPharmacologicalService.saveIndications('dummy-token', ordsrvnro, textToSave).catch(err => {
+                const token = localStorage.getItem('gam_access_token') || '';
+                saveIndications(token, ordsrvnro, textToSave).catch(err => {
                     console.error('Error saving non-pharmacological indications on unmount:', err);
                 });
             }

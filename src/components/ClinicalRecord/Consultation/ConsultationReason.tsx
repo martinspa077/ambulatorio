@@ -1,19 +1,21 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { consultationReasonService, LastConsultationReason } from '@/services/consultationReasonService';
-import { generalService, TerminologyResult } from '@/services/generalService';
+import { getLastReasons, getCurrentReason, saveCurrentReason, LastConsultationReason, CurrentConsultationReason } from '@/services/consultationReasonService';
+import { searchTerminology, TerminologyResult } from '@/services/generalService';
 
 interface ConsultationReasonProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialLastReasons: LastConsultationReason[];
+    initialCurrentReasons: CurrentConsultationReason[];
 }
 
-export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProps) {
+export default function ConsultationReason({ ordsrvnro, initialLastReasons, initialCurrentReasons }: ConsultationReasonProps) {
     // State
-    const [lastReasons, setLastReasons] = useState<LastConsultationReason[]>([]);
-    const [currentReasons, setCurrentReasons] = useState<string[]>([]);
-    const [loadingHistory, setLoadingHistory] = useState(true);
-    const [loadingCurrent, setLoadingCurrent] = useState(true);
+    const [lastReasons, setLastReasons] = useState<LastConsultationReason[]>(initialLastReasons);
+    const [currentReasons, setCurrentReasons] = useState<CurrentConsultationReason[]>(initialCurrentReasons);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [loadingCurrent, setLoadingCurrent] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
 
     // Search Modal State
@@ -24,52 +26,29 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
     const [searchError, setSearchError] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
 
-    const currentReasonsRef = useRef<string[]>([]);
+    const currentReasonsRef = useRef<CurrentConsultationReason[]>(initialCurrentReasons);
 
-    // Fetch Data
+    // Sync props with state
     useEffect(() => {
-        let mounted = true;
+        setLastReasons(initialLastReasons);
+    }, [initialLastReasons]);
 
-        const loadData = async () => {
-            // Load History
-            try {
-                const history = await consultationReasonService.getLastReasons('dummy-token', ordsrvnro);
-                if (mounted) {
-                    setLastReasons(history);
-                    setLoadingHistory(false);
-                }
-            } catch (e) {
-                console.error(e);
-                if (mounted) setLoadingHistory(false);
-            }
-
-            // Load Current
-            try {
-                const current = await consultationReasonService.getCurrentReason('dummy-token', ordsrvnro);
-                if (mounted) {
-                    setCurrentReasons(current);
-                    currentReasonsRef.current = current;
-                    setLoadingCurrent(false);
-                }
-            } catch (e) {
-                console.error(e);
-                if (mounted) setLoadingCurrent(false);
-            }
-        };
-
-        loadData();
-
-        return () => { mounted = false; };
-    }, [ordsrvnro]);
+    useEffect(() => {
+        setCurrentReasons(initialCurrentReasons);
+        currentReasonsRef.current = initialCurrentReasons;
+    }, [initialCurrentReasons]);
 
     // Save on unmount
     useEffect(() => {
         return () => {
-            if (!loadingCurrent) {
-                consultationReasonService.saveCurrentReason('dummy-token', ordsrvnro, currentReasonsRef.current);
+            const hasChanged = JSON.stringify(currentReasonsRef.current) !== JSON.stringify(initialCurrentReasons);
+            if (!loadingCurrent && hasChanged) {
+                const token = localStorage.getItem('gam_access_token') || '';
+                saveCurrentReason(token, ordsrvnro, currentReasonsRef.current);
             }
         };
-    }, [ordsrvnro, loadingCurrent]);
+    }, [ordsrvnro, loadingCurrent, initialCurrentReasons]);
+
 
     // Search Logic
     const handleSearch = async () => {
@@ -79,7 +58,7 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
         try {
             // Simulate error randomly or just success? User prompt implies handling unavailability.
             // Let's implement success by default, but user can trigger manual fallback visually if needed.
-            const results = await generalService.searchTerminology(searchTerm);
+            const results = await searchTerminology(searchTerm);
             setSearchResults(results);
         } catch (error) {
             console.error(error);
@@ -91,8 +70,11 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
     };
 
     const handleSelectResult = (result: TerminologyResult) => {
-        const newReason = result.description;
-        const newReasons = [...currentReasons, newReason];
+        const newReasonObj: CurrentConsultationReason = {
+            id: result.id,
+            reason: result.description
+        };
+        const newReasons = [...currentReasons, newReasonObj];
         setCurrentReasons(newReasons);
         currentReasonsRef.current = newReasons;
         setShowSearchModal(false);
@@ -102,7 +84,11 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
 
     const handleManualEntry = () => {
         if (!searchTerm.trim()) return;
-        const newReasons = [...currentReasons, searchTerm];
+        const newReasonObj: CurrentConsultationReason = {
+            id: crypto.randomUUID(),
+            reason: searchTerm
+        };
+        const newReasons = [...currentReasons, newReasonObj];
         setCurrentReasons(newReasons);
         currentReasonsRef.current = newReasons;
         setShowSearchModal(false);
@@ -116,8 +102,12 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
         currentReasonsRef.current = newReasons;
     };
 
-    const handleCopyFromHistory = (reason: string) => {
-        const newReasons = [...currentReasons, reason];
+    const handleCopyFromHistory = (id: string, reasonText: string) => {
+        const newReasonObj: CurrentConsultationReason = {
+            id: id,
+            reason: reasonText
+        };
+        const newReasons = [...currentReasons, newReasonObj];
         setCurrentReasons(newReasons);
         currentReasonsRef.current = newReasons;
     };
@@ -135,7 +125,7 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
                     <div className="bg-white min-h-[150px]">
                         {loadingHistory ? (
                             <div className="p-4 text-center text-slate-400">Cargando...</div>
-                        ) : lastReasons.length === 0 ? (
+                        ) : !Array.isArray(lastReasons) || lastReasons.length === 0 ? (
                             <div className="p-4 text-center text-slate-400 italic">No hay registros anteriores.</div>
                         ) : (
                             <div className="divide-y divide-slate-100">
@@ -146,7 +136,7 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
                                             <span>{item.reason}</span>
                                         </div>
                                         <button
-                                            onClick={() => handleCopyFromHistory(item.reason)}
+                                            onClick={() => handleCopyFromHistory(item.id, item.reason)}
                                             className="w-8 h-8 flex items-center justify-center rounded-full bg-[#005F61] text-white opacity-0 group-hover:opacity-100 transition-opacity"
                                         >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
@@ -192,9 +182,9 @@ export default function ConsultationReason({ ordsrvnro }: ConsultationReasonProp
                             </div>
                         ) : currentReasons.length > 0 ? (
                             <div className="space-y-2">
-                                {currentReasons.map((reason, idx) => (
-                                    <div key={idx} className="flex items-start justify-between bg-slate-50 p-3 rounded group hover:bg-slate-100 transition-colors">
-                                        <span className="text-slate-800 font-medium">{reason}</span>
+                                {currentReasons.map((item, idx) => (
+                                    <div key={item.id || idx} className="flex items-start justify-between bg-slate-50 p-3 rounded group hover:bg-slate-100 transition-colors">
+                                        <span className="text-slate-800 font-medium">{item.reason}</span>
                                         <button
                                             onClick={() => handleDeleteReason(idx)}
                                             className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"

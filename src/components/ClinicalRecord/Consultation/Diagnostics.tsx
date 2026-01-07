@@ -1,50 +1,47 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { diagnosticsService, ActiveProblem, DiagnosticHistoryItem, ConsultationDiagnosis } from '@/services/diagnosticsService';
+import { getActiveProblems, getDiagnosticHistory, getConsultationDiagnostics, saveConsultationDiagnostics, ActiveProblem, DiagnosticHistoryItem, ConsultationDiagnosis } from '@/services/diagnosticsService';
 import ActiveProblemsGrid from './ActiveProblemsGrid';
 import DiagnosticHistoryGrid from './DiagnosticHistoryGrid';
 import ConsultationDiagnostics from './ConsultationDiagnostics';
 
 interface DiagnosticsProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialActiveProblems: ActiveProblem[];
+    initialHistory: DiagnosticHistoryItem[];
+    initialConsultationDiagnostics: ConsultationDiagnosis[];
 }
 
-export default function Diagnostics({ ordsrvnro }: DiagnosticsProps) {
+export default function Diagnostics({
+    ordsrvnro,
+    initialActiveProblems,
+    initialHistory,
+    initialConsultationDiagnostics
+}: DiagnosticsProps) {
     const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
-    const [activeProblems, setActiveProblems] = useState<ActiveProblem[]>([]);
-    const [diagnosticHistory, setDiagnosticHistory] = useState<DiagnosticHistoryItem[]>([]);
-    const [consultationDiagnostics, setConsultationDiagnostics] = useState<ConsultationDiagnosis[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [activeProblems, setActiveProblems] = useState<ActiveProblem[]>(initialActiveProblems);
+    const [diagnosticHistory, setDiagnosticHistory] = useState<DiagnosticHistoryItem[]>(initialHistory);
+    const [consultationDiagnostics, setConsultationDiagnostics] = useState<ConsultationDiagnosis[]>(initialConsultationDiagnostics);
+    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [diagnosisToAdd, setDiagnosisToAdd] = useState<string | null>(null);
 
-    // Load data on mount
+    // Sync props with state
     useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
-            try {
-                const [problems, history, consultation] = await Promise.all([
-                    diagnosticsService.getActiveProblems(ordsrvnro),
-                    diagnosticsService.getDiagnosticHistory(ordsrvnro),
-                    diagnosticsService.getConsultationDiagnostics(ordsrvnro)
-                ]);
+        setActiveProblems(initialActiveProblems);
+    }, [initialActiveProblems]);
 
-                setActiveProblems(problems);
-                setDiagnosticHistory(history);
-                setConsultationDiagnostics(consultation);
-            } catch (error) {
-                console.error('Error loading diagnostics data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
+    useEffect(() => {
+        setDiagnosticHistory(initialHistory);
+    }, [initialHistory]);
 
-        loadData();
-    }, [ordsrvnro]);
+    useEffect(() => {
+        setConsultationDiagnostics(initialConsultationDiagnostics);
+    }, [initialConsultationDiagnostics]);
 
     // Ref to track current diagnostics for save on unmount
-    const consultationDiagnosticsRef = useRef(consultationDiagnostics);
+    const consultationDiagnosticsRef = useRef(initialConsultationDiagnostics);
 
     // Update ref whenever diagnostics change
     useEffect(() => {
@@ -56,12 +53,8 @@ export default function Diagnostics({ ordsrvnro }: DiagnosticsProps) {
         return () => {
             const diagnosticsToSave = consultationDiagnosticsRef.current;
             if (diagnosticsToSave.length > 0) {
-                // We use the service directly here. 
-                // correct logic depends on whether we want to await this or just fire it.
-                // Since it's unmount, fire and forget is often safer for sync unmounts,
-                // but for critical data, a more robust solution like navigator.sendBeacon might be needed if the fetch cancels.
-                // For now, consistent with other parts of the app, we'll just call the async function.
-                diagnosticsService.saveConsultationDiagnostics(ordsrvnro, diagnosticsToSave).catch(err => {
+                const token = localStorage.getItem('gam_access_token') || '';
+                saveConsultationDiagnostics(token, ordsrvnro, diagnosticsToSave).catch(err => {
                     console.error('Error saving diagnostics on unmount:', err);
                 });
             }

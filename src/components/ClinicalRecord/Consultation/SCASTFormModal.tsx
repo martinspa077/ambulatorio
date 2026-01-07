@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SCASTData } from '@/services/diagnosticsService';
 
 interface SCASTFormModalProps {
@@ -8,13 +8,28 @@ interface SCASTFormModalProps {
     onClose: () => void;
     onSave: (data: SCASTData) => void;
     diagnosisName: string;
+    initialData?: SCASTData;
 }
 
-export default function SCASTFormModal({ isOpen, onClose, onSave, diagnosisName }: SCASTFormModalProps) {
+export default function SCASTFormModal({ isOpen, onClose, onSave, diagnosisName, initialData }: SCASTFormModalProps) {
     const [strategy, setStrategy] = useState<SCASTData['reperfusionStrategy']>('no_aplica');
     const [timeMinutes, setTimeMinutes] = useState<string>('');
 
+    useEffect(() => {
+        if (isOpen) {
+            if (initialData) {
+                setStrategy(initialData.reperfusionStrategy || 'no_aplica');
+                setTimeMinutes(initialData.timeMinutes ? initialData.timeMinutes.toString() : '');
+            } else {
+                setStrategy('no_aplica');
+                setTimeMinutes('');
+            }
+        }
+    }, [isOpen, initialData]);
+
     if (!isOpen) return null;
+
+    // ... rest of component
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

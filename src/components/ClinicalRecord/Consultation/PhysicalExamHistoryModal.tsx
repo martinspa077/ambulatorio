@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { physicalExamService, PhysicalExamHistoryItem, PhysicalExamData } from '@/services/physicalExamService';
-import { evaService } from '@/services/evaService';
+import { getPhysicalExamHistory, PhysicalExamHistoryItem, PhysicalExamData } from '@/services/physicalExamService';
+import { getEVAHistory } from '@/services/evaService';
 
 interface PhysicalExamHistoryModalProps {
     isOpen: boolean;
     onClose: () => void;
-    ordsrvnro: number;
+    ordsrvnro: string;
     examType: keyof PhysicalExamData | 'pa' | 'eva';
     title: string;
     unit?: string;
@@ -22,8 +22,8 @@ export default function PhysicalExamHistoryModal({ isOpen, onClose, ordsrvnro, e
             setLoading(true);
 
             const fetchPromise = examType === 'eva'
-                ? evaService.getEVAHistory('dummy-token', ordsrvnro)
-                : physicalExamService.getPhysicalExamHistory('dummy-token', ordsrvnro, examType as keyof PhysicalExamData | 'pa');
+                ? getEVAHistory('dummy-token', ordsrvnro)
+                : getPhysicalExamHistory('dummy-token', ordsrvnro, examType as keyof PhysicalExamData | 'pa');
 
             fetchPromise
                 .then(data => {

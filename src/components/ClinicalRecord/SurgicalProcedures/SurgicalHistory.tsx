@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { surgicalProceduresService, SurgicalHistoryItem } from '@/services/surgicalProceduresService';
+import { getHistory } from '@/services/surgicalProceduresService';
+import { SurgicalHistoryItem } from '@/services/surgicalProceduresTypes';
 
 interface SurgicalHistoryProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialHistory: SurgicalHistoryItem[];
 }
 
-export default function SurgicalHistory({ ordsrvnro }: SurgicalHistoryProps) {
-    const [history, setHistory] = useState<SurgicalHistoryItem[]>([]);
-    const [loading, setLoading] = useState(true);
+export default function SurgicalHistory({ ordsrvnro, initialHistory }: SurgicalHistoryProps) {
+    const [history, setHistory] = useState<SurgicalHistoryItem[]>(initialHistory);
+    const [loading, setLoading] = useState(false);
 
     // Filters
     const [procedureFilter, setProcedureFilter] = useState('');
@@ -17,29 +19,20 @@ export default function SurgicalHistory({ ordsrvnro }: SurgicalHistoryProps) {
     const [prescribedFilter, setPrescribedFilter] = useState('todos');
     const [statusFilter, setStatusFilter] = useState('todos');
 
+    // Sync props
     useEffect(() => {
-        const loadHistory = async () => {
-            setLoading(true);
-            try {
-                const data = await surgicalProceduresService.getHistory(ordsrvnro);
-                setHistory(data);
-            } catch (error) {
-                console.error('Error loading surgical history:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadHistory();
-    }, [ordsrvnro]);
+        setHistory(initialHistory);
+    }, [initialHistory]);
 
     // Apply filters (mock logic since API usually handles this)
     // Apply filters (mock logic since API usually handles this)
     const filteredHistory = history.filter(item => {
         const matchesProcedure = item.mainProcedure.toLowerCase().includes(procedureFilter.toLowerCase());
         const matchesStatus = statusFilter === 'todos' ||
-            (statusFilter === 'pendiente' && (item.status === 'pendiente_autorizacion' || item.status === 'pendiente_coordinar')) ||
+            (statusFilter === 'pendiente_autorizacion' && item.status === 'pendiente_autorizacion') ||
+            (statusFilter === 'pendiente_coordinar' && item.status === 'pendiente_coordinar') ||
             (statusFilter === 'coordinado' && item.status === 'coordinado') ||
+            (statusFilter === 'suspendido' && item.status === 'suspendido') ||
             (statusFilter === 'realizado' && item.status === 'realizado');
 
         // Date filters
@@ -100,8 +93,8 @@ export default function SurgicalHistory({ ordsrvnro }: SurgicalHistoryProps) {
             </h3>
 
             {/* Filters */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-                <div>
+            <div className="grid grid-cols-12 gap-4 mb-6">
+                <div className="col-span-4">
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                         Procedimiento
                     </label>
@@ -113,7 +106,7 @@ export default function SurgicalHistory({ ordsrvnro }: SurgicalHistoryProps) {
                         className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl focus:outline-none focus:border-teal-500 dark:bg-slate-800 dark:text-white"
                     />
                 </div>
-                <div>
+                <div className="col-span-3">
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                         Prescripto hace
                     </label>
@@ -128,7 +121,7 @@ export default function SurgicalHistory({ ordsrvnro }: SurgicalHistoryProps) {
                         <option value="1_anio">1 año</option>
                     </select>
                 </div>
-                <div>
+                <div className="col-span-5">
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                         Estado
                     </label>
@@ -138,7 +131,8 @@ export default function SurgicalHistory({ ordsrvnro }: SurgicalHistoryProps) {
                         className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl focus:outline-none focus:border-teal-500 dark:bg-slate-800 dark:text-white"
                     >
                         <option value="todos">Todos</option>
-                        <option value="pendiente">Pendiente</option>
+                        <option value="pendiente_autorizacion">Pendiente de autorización</option>
+                        <option value="pendiente_coordinar">Pendiente de coordinación</option>
                         <option value="coordinado">Coordinado</option>
                         <option value="suspendido">Suspendido</option>
                         <option value="realizado">Realizado</option>

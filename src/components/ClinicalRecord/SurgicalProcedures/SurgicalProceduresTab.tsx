@@ -4,13 +4,15 @@ import { useState, useRef, useEffect } from 'react';
 import SurgicalHistory from './SurgicalHistory';
 import SurgicalSearchModal from './SurgicalSearchModal';
 import SurgicalPrescriptionForm from './SurgicalPrescriptionForm';
-import { SurgicalProcedure, surgicalProceduresService, DEFAULT_PRESCRIPTION_DATA } from '@/services/surgicalProceduresService';
+import { savePrescription, getPrescription } from '@/services/surgicalProceduresService';
+import { SurgicalProcedure, DEFAULT_PRESCRIPTION_DATA, SurgicalHistoryItem } from '@/services/surgicalProceduresTypes';
 
 interface SurgicalProceduresTabProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    initialHistory: SurgicalHistoryItem[];
 }
 
-export default function SurgicalProceduresTab({ ordsrvnro }: SurgicalProceduresTabProps) {
+export default function SurgicalProceduresTab({ ordsrvnro, initialHistory }: SurgicalProceduresTabProps) {
     const [showSearchModal, setShowSearchModal] = useState(false);
     // Track multiple pending forms. Using simpler IDs for local state.
     const [pendingForms, setPendingForms] = useState<{ id: string, procedures: SurgicalProcedure[], data?: any, isCollapsed: boolean }[]>([]);
@@ -22,6 +24,23 @@ export default function SurgicalProceduresTab({ ordsrvnro }: SurgicalProceduresT
         formsRef.current = pendingForms;
     }, [pendingForms]);
 
+    // Fetch prescriptions on mount
+    useEffect(() => {
+        let mounted = true;
+        getPrescription(ordsrvnro).then(prescriptions => {
+            if (mounted && prescriptions.length > 0) {
+                const forms = prescriptions.map(p => ({
+                    id: p.id,
+                    procedures: p.procedures,
+                    data: p,
+                    isCollapsed: true
+                }));
+                setPendingForms(forms);
+            }
+        });
+        return () => { mounted = false; };
+    }, [ordsrvnro]);
+
     // Save on unmount
     useEffect(() => {
         return () => {
@@ -29,7 +48,7 @@ export default function SurgicalProceduresTab({ ordsrvnro }: SurgicalProceduresT
             if (forms.length > 0) {
                 forms.forEach(form => {
                     if (form.data) { // Only save if there is data
-                        surgicalProceduresService.savePrescription(ordsrvnro, {
+                        savePrescription(ordsrvnro, {
                             ...form.data,
                             procedures: form.procedures
                         }).catch(err => console.error("Error saving prescription on exit", err));
@@ -77,7 +96,7 @@ export default function SurgicalProceduresTab({ ordsrvnro }: SurgicalProceduresT
         // Here we might just update the local state to "saved" or "collapsed"
         // But the prompt says "Confirmar solo colapsa". It implies the user might review later or it auto-saves?
         // Let's assume we save to backend AND collapse.
-        await surgicalProceduresService.savePrescription(ordsrvnro, {
+        await savePrescription(ordsrvnro, {
             ...data,
             procedures: pendingForms.find(f => f.id === formId)?.procedures || []
         });
@@ -98,7 +117,7 @@ export default function SurgicalProceduresTab({ ordsrvnro }: SurgicalProceduresT
         <div className="grid grid-cols-12 gap-6 items-start">
             {/* Left Side: History */}
             <div className="col-span-5 h-[calc(100vh-340px)] sticky top-6">
-                <SurgicalHistory ordsrvnro={ordsrvnro} />
+                <SurgicalHistory ordsrvnro={ordsrvnro} initialHistory={initialHistory} />
             </div>
 
             {/* Right Side: Prescription */}
@@ -127,6 +146,7 @@ export default function SurgicalProceduresTab({ ordsrvnro }: SurgicalProceduresT
                     pendingForms.map(form => (
                         <SurgicalPrescriptionForm
                             key={form.id}
+                            ordsrvnro={ordsrvnro}
                             selectedProcedures={form.procedures}
                             data={form.data}
                             isCollapsed={form.isCollapsed}

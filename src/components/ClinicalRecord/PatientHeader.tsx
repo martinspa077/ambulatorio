@@ -3,7 +3,7 @@ import ContactModal from './ContactModal';
 import NotesModal from './NotesModal';
 import BackgroundsModal from './BackgroundsModal';
 import AlertsModal from './AlertsModal';
-import { historiaClinicaService, PatientContactInfoResponse } from '@/services/historiaClinicaService';
+import { getPatientNotes, getAntecedentes, getPatientAlerts, getContactInfo, PatientContactInfoResponse } from '@/services/headerServices';
 
 interface ActionIconProps {
     label: string;
@@ -29,28 +29,39 @@ function ActionIcon({ label, color, icon, onClick }: ActionIconProps) {
     );
 }
 
-export default function PatientHeader({ patient, ordsrvnro }: { patient: any, ordsrvnro: number }) {
+export interface HeaderData {
+    hasNotes: boolean;
+    hasBackgrounds: boolean;
+    hasAlerts: boolean;
+}
+
+// ... other imports
+
+export default function PatientHeader({ patient, ordsrvnro, headerData }: { patient: any, ordsrvnro: string, headerData: HeaderData }) {
     const [showContactModal, setShowContactModal] = useState(false);
     const [contactData, setContactData] = useState<PatientContactInfoResponse | null>(null);
     const [loadingContact, setLoadingContact] = useState(false);
     const [showNotesModal, setShowNotesModal] = useState(false);
-    const [hasNotes, setHasNotes] = useState(false);
     const [showBackgroundsModal, setShowBackgroundsModal] = useState(false);
-    const [hasBackgrounds, setHasBackgrounds] = useState(false);
     const [showAlertsModal, setShowAlertsModal] = useState(false);
-    const [hasAlerts, setHasAlerts] = useState(false);
+
+    const [hasNotes, setHasNotes] = useState(headerData.hasNotes);
+    const [hasBackgrounds, setHasBackgrounds] = useState(headerData.hasBackgrounds);
+    const [hasAlerts, setHasAlerts] = useState(headerData.hasAlerts);
 
     const [showPhotoModal, setShowPhotoModal] = useState(false);
 
+    // Sync with prop updates if needed (e.g. navigation)
     useEffect(() => {
-        checkNotes();
-        checkBackgrounds();
-        checkAlerts();
-    }, [ordsrvnro]);
+        setHasNotes(headerData.hasNotes);
+        setHasBackgrounds(headerData.hasBackgrounds);
+        setHasAlerts(headerData.hasAlerts);
+    }, [headerData]);
 
     const checkNotes = async () => {
         try {
-            const notes = await historiaClinicaService.getPatientNotes('dummy-token', ordsrvnro);
+            const token = localStorage.getItem('gam_access_token') || '';
+            const notes = await getPatientNotes(token, ordsrvnro);
             setHasNotes(notes.length > 0);
         } catch (error) {
             console.error('Error checking notes:', error);
@@ -59,7 +70,8 @@ export default function PatientHeader({ patient, ordsrvnro }: { patient: any, or
 
     const checkBackgrounds = async () => {
         try {
-            const backgrounds = await historiaClinicaService.getAntecedentes('dummy-token', ordsrvnro);
+            const token = localStorage.getItem('gam_access_token') || '';
+            const backgrounds = await getAntecedentes(token, ordsrvnro);
             setHasBackgrounds(backgrounds.length > 0);
         } catch (error) {
             console.error('Error checking backgrounds:', error);
@@ -68,7 +80,8 @@ export default function PatientHeader({ patient, ordsrvnro }: { patient: any, or
 
     const checkAlerts = async () => {
         try {
-            const alerts = await historiaClinicaService.getPatientAlerts('dummy-token', ordsrvnro);
+            const token = localStorage.getItem('gam_access_token') || '';
+            const alerts = await getPatientAlerts(token, ordsrvnro);
             setHasAlerts(alerts.length > 0);
         } catch (error) {
             console.error('Error checking alerts:', error);
@@ -80,7 +93,8 @@ export default function PatientHeader({ patient, ordsrvnro }: { patient: any, or
         if (!contactData) {
             setLoadingContact(true);
             try {
-                const data = await historiaClinicaService.getContactInfo('dummy-token', ordsrvnro);
+                const token = localStorage.getItem('gam_access_token') || '';
+                const data = await getContactInfo(token, ordsrvnro);
                 setContactData(data);
             } catch (error) {
                 console.error('Error fetching contact info:', error);

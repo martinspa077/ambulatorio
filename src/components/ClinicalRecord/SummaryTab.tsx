@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { diagnosticsService, ActiveProblem } from '@/services/diagnosticsService';
-import { historiaClinicaService, Antecedente } from '@/services/historiaClinicaService';
-import { summaryService, TemporariaData, ConstanciaData, LastConsultationData } from '@/services/summaryService';
+import { ActiveProblem } from '@/services/diagnosticsService';
+import { Antecedente } from '@/services/headerServices';
+import { TemporariaData, ConstanciaData, LastConsultationData } from '@/services/summaryService';
 import SummaryCard from './Summary/SummaryCard';
+import { useState } from 'react';
+import ActiveProblemModal from './Summary/ActiveProblemModal';
+import AntecedenteModal from './Summary/AntecedenteModal';
 
 // Icons
 const IconProblems = () => (
@@ -55,33 +57,40 @@ const IconLastConsultation = () => (
 );
 
 interface SummaryTabProps {
-    ordsrvnro: number;
+    ordsrvnro: string;
+    activeProblems: ActiveProblem[];
+    antecedentes: Antecedente[];
+    temporaria: TemporariaData | null;
+    constancia: ConstanciaData | null;
+    lastConsultation: LastConsultationData | null;
 }
 
-export default function SummaryTab({ ordsrvnro }: SummaryTabProps) {
-    const [activeProblems, setActiveProblems] = useState<ActiveProblem[]>([]);
-    const [antecedentes, setAntecedentes] = useState<Antecedente[]>([]);
-    const [temporaria, setTemporaria] = useState<TemporariaData | null>(null);
-    const [constancia, setConstancia] = useState<ConstanciaData | null>(null);
-    const [lastConsultation, setLastConsultation] = useState<LastConsultationData | null>(null);
+export default function SummaryTab({
+    ordsrvnro,
+    activeProblems,
+    antecedentes,
+    temporaria,
+    constancia,
+    lastConsultation
+}: SummaryTabProps) {
 
-    useEffect(() => {
-        // Fetch All Data
-        diagnosticsService.getActiveProblems(ordsrvnro).then(setActiveProblems);
-        historiaClinicaService.getAntecedentes('token', ordsrvnro).then(setAntecedentes);
-        summaryService.getTemporaria('token', ordsrvnro).then(setTemporaria);
-        summaryService.getConstancia('token', ordsrvnro).then(setConstancia);
-        summaryService.getLastConsultation('token', ordsrvnro).then(setLastConsultation);
-    }, [ordsrvnro]);
+    const [selectedProblem, setSelectedProblem] = useState<ActiveProblem | null>(null);
+    const [selectedAntecedente, setSelectedAntecedente] = useState<Antecedente | null>(null);
 
-    const personalHistory = antecedentes.filter(a => a.tipo === 'Personal');
-    const familyHistory = antecedentes.filter(a => a.tipo === 'Familiar');
-    const socioHistory = antecedentes.filter(a => a.tipo === 'Socioeconomico');
+    const personalHistory = antecedentes.filter(a => a.tipo === 'APE');
+    const familyHistory = antecedentes.filter(a => a.tipo === 'ANT');
+    const socioHistory = antecedentes.filter(a => a.tipo === 'ASE');
 
-    const SearchIcon = () => (
-        <svg className="w-5 h-5 text-[#005F61] mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+    const SearchIcon = ({ onClick }: { onClick?: () => void }) => (
+        <button
+            onClick={onClick}
+            className={`flex-shrink-0 ${onClick ? 'cursor-pointer hover:bg-slate-100 rounded-full p-1 transition-colors' : ''}`}
+            disabled={!onClick}
+        >
+            <svg className="w-5 h-5 text-[#005F61]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+        </button>
     );
 
     return (
@@ -91,9 +100,9 @@ export default function SummaryTab({ ordsrvnro }: SummaryTabProps) {
                 <div className="space-y-3">
                     {activeProblems.length > 0 ? (
                         activeProblems.map(p => (
-                            <div key={p.id} className="flex items-center text-slate-800 font-bold uppercase">
-                                <SearchIcon />
-                                {p.diagnosis}
+                            <div key={p.id} className="flex items-center text-slate-800 font-bold uppercase gap-2">
+                                <SearchIcon onClick={() => setSelectedProblem(p)} />
+                                <span>{p.diagnosis}</span>
                             </div>
                         ))
                     ) : (
@@ -106,9 +115,9 @@ export default function SummaryTab({ ordsrvnro }: SummaryTabProps) {
                 <div className="space-y-3">
                     {personalHistory.length > 0 ? (
                         personalHistory.map(a => (
-                            <div key={a.id} className="flex items-center text-slate-800 font-bold uppercase">
-                                <SearchIcon />
-                                {a.descripcion}
+                            <div key={a.id} className="flex items-center text-slate-800 font-bold uppercase gap-2">
+                                <SearchIcon onClick={() => setSelectedAntecedente(a)} />
+                                <span>{a.descripcion}</span>
                             </div>
                         ))
                     ) : (
@@ -122,9 +131,9 @@ export default function SummaryTab({ ordsrvnro }: SummaryTabProps) {
                 <div className="space-y-3">
                     {familyHistory.length > 0 ? (
                         familyHistory.map(a => (
-                            <div key={a.id} className="flex items-center text-slate-800 font-bold uppercase">
-                                <SearchIcon />
-                                {a.descripcion} {a.parentesco ? `(${a.parentesco})` : ''}
+                            <div key={a.id} className="flex items-center text-slate-800 font-bold uppercase gap-2">
+                                <SearchIcon onClick={() => setSelectedAntecedente(a)} />
+                                <span>{a.descripcion} {a.parentesco ? `(${a.parentesco})` : ''}</span>
                             </div>
                         ))
                     ) : (
@@ -137,9 +146,9 @@ export default function SummaryTab({ ordsrvnro }: SummaryTabProps) {
                 <div className="space-y-3">
                     {socioHistory.length > 0 ? (
                         socioHistory.map(a => (
-                            <div key={a.id} className="flex items-center text-slate-800 font-bold uppercase">
-                                <SearchIcon />
-                                {a.descripcion}
+                            <div key={a.id} className="flex items-center text-slate-800 font-bold uppercase gap-2">
+                                <SearchIcon onClick={() => setSelectedAntecedente(a)} />
+                                <span>{a.descripcion}</span>
                             </div>
                         ))
                     ) : (
@@ -200,6 +209,18 @@ export default function SummaryTab({ ordsrvnro }: SummaryTabProps) {
                     )}
                 </SummaryCard>
             </div>
+
+            <ActiveProblemModal
+                isOpen={!!selectedProblem}
+                onClose={() => setSelectedProblem(null)}
+                problem={selectedProblem}
+            />
+
+            <AntecedenteModal
+                isOpen={!!selectedAntecedente}
+                onClose={() => setSelectedAntecedente(null)}
+                antecedente={selectedAntecedente}
+            />
         </div>
     );
 }
